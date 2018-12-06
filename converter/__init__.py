@@ -213,6 +213,53 @@ class Converter(object):
                                                 timeout=timeout):
                 yield int((100.0 * timecode) / info.format.duration)
 
+    def convert_no_opts_checking(self, infile, outfile, opts, timeout=10):
+        """
+        Convert media file (infile) with default options, and
+        save it to outfile. For two-pass encoding, specify the pass (1 or 2)
+        in the twopass parameter.
+
+        Options should be passed as a dictionary. The keys are:
+            * format (mandatory, string) - container format; see
+              formats.BaseFormat for list of supported formats
+            * audio (optional, dict) - audio codec and options; see
+              avcodecs.AudioCodec for list of supported options
+            * video (optional, dict) - video codec and options; see
+              avcodecs.VideoCodec for list of supported options
+            * map (optional, int) - can be used to map all content of stream 0
+
+        Multiple audio/video streams are not supported. The output has to
+        have at least an audio or a video stream (or both).
+
+        Convert returns a generator that needs to be iterated to drive the
+        conversion process. The generator will periodically yield timecode
+        of currently processed part of the file (ie. at which second in the
+        content is the conversion process currently).
+
+        The optional timeout argument specifies how long should the operation
+        be blocked in case ffmpeg gets stuck and doesn't report back. This
+        doesn't limit the total conversion time, just the amount of time
+        Converter will wait for each update from ffmpeg. As it's usually
+        less than a second, the default of 10 is a reasonable default. To
+        disable the timeout, set it to None. You may need to do this if
+        using Converter in a threading environment, since the way the
+        timeout is handled (using signals) has special restriction when
+        using threads.
+        """
+
+        if not os.path.exists(infile):
+            raise ConverterError("Source file doesn't exist: " + infile)
+
+        info = self.ffmpeg.probe(infile)
+        if info is None:
+            raise ConverterError("Can't get information about source file")
+
+        if info.format.duration < 0.01:
+            raise ConverterError('Zero-length media')
+
+        for timecode in self.ffmpeg.convert(infile, outfile, opts, timeout=timeout):
+            yield int((100.0 * timecode) / info.format.duration)
+
     def probe(self, fname, posters_as_video=True):
         """
         Examine the media file. See the documentation of
